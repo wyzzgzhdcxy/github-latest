@@ -1,0 +1,4 @@
+# 用于测试下载到 E:\github_app
+https://github.com/SagerNet/sing-box/releases
+https://github.com/XTLS/Xray-core/releases
+https://github.com/0xErwin1/dbflux/releases
