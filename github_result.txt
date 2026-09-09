@@ -1,6 +1,4 @@
-# SagerNet/sing-box v1.14.0 (1)
-https://github.com/SagerNet/sing-box/releases/download/v1.14.0/sing-box-1.14.0-windows-amd64.zip
-# XTLS/Xray-core v26.3.27 (1)
-https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-windows-64.zip
-# 0xErwin1/dbflux v0.7.7 (1)
-https://github.com/0xErwin1/dbflux/releases/download/v0.7.7/dbflux-windows-amd64-setup.exe
+# SagerNet/sing-box v1.14.0: (up to date — 1 urls unchanged)
+# XTLS/Xray-core v26.3.27: (up to date — 1 urls unchanged)
+# 0xErwin1/dbflux v0.7.7: (up to date — 1 urls unchanged)
+# microsoft/WSL 2.7.13: (up to date — 1 urls unchanged)

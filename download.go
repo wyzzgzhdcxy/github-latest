@@ -106,52 +106,67 @@ func downloadFromResultFile(resultPath, downloadDir, cacheDir string) error {
 		}
 		urls = append(urls, line)
 	}
-	return downloadAll(urls, downloadDir, cacheDir)
+	_ = downloadAll(urls, downloadDir, cacheDir, false /* skipIfExists */)
+	return nil
 }
 
-// downloadAll downloads each URL to downloadDir. Files already present in
-// downloadDir are skipped. Each file is fetched into cacheDir first, then
-// moved (atomic on same volume) so partial downloads never appear in the
-// target directory.
-func downloadAll(urls []string, downloadDir, cacheDir string) error {
+// downloadAll downloads each URL to downloadDir. Each file is fetched
+// into cacheDir first, then moved (atomic on same volume) so partial
+// downloads never appear in the target directory.
+//
+// skipIfExists=true keeps the legacy "skip when target is already on
+// disk" behavior. skipIfExists=false (batch mode, where the URL
+// comparison is the gate) always re-downloads and overwrites the target
+// — the caller has already decided the GitHub URL changed, so any
+// local copy is stale by definition.
+//
+// The returned batchResult lets callers (e.g. runBatch) persist
+// per-call statistics back into the urls table.
+func downloadAll(urls []string, downloadDir, cacheDir string, skipIfExists bool) batchResult {
 	if len(urls) == 0 {
-		return nil
+		return batchResult{}
 	}
 	if err := os.MkdirAll(downloadDir, 0o755); err != nil {
-		return fmt.Errorf("create download dir %s: %w", downloadDir, err)
+		fmt.Fprintf(os.Stderr, "! mkdir %s: %v\n", downloadDir, err)
+		return batchResult{}
 	}
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return fmt.Errorf("create cache dir %s: %w", cacheDir, err)
+		fmt.Fprintf(os.Stderr, "! mkdir %s: %v\n", cacheDir, err)
+		return batchResult{}
 	}
 
-	var skipped, downloaded, failed int
+	var res batchResult
 	for _, u := range urls {
 		fname := filenameFromURL(u)
 		target := filepath.Join(downloadDir, fname)
-		if _, err := os.Stat(target); err == nil {
-			skipped++
-			fmt.Fprintf(os.Stderr, "= skip   %s (already in target)\n", fname)
-			continue
+		if skipIfExists {
+			if _, err := os.Stat(target); err == nil {
+				res.Skipped++
+				res.Packages = append(res.Packages, fname)
+				fmt.Fprintf(os.Stderr, "= skip   %s (already in target)\n", fname)
+				continue
+			}
 		}
 		fmt.Fprintf(os.Stderr, "+ get    %s\n", fname)
 		cache, err := downloadOne(u, cacheDir)
 		if err != nil {
-			failed++
+			res.Failed++
 			fmt.Fprintf(os.Stderr, "\n! FAIL   %s: %v\n", fname, err)
 			continue
 		}
 		if err := moveFile(cache, target); err != nil {
-			failed++
+			res.Failed++
 			fmt.Fprintf(os.Stderr, "! FAIL   move %s -> %s: %v\n", cache, target, err)
 			_ = os.Remove(cache)
 			continue
 		}
-		downloaded++
+		res.Downloaded++
+		res.Packages = append(res.Packages, fname)
 		fmt.Fprintf(os.Stderr, "v saved  %s\n", target)
 	}
 	fmt.Fprintf(os.Stderr, "\nsummary: %d downloaded, %d skipped, %d failed -> %s\n",
-		downloaded, skipped, failed, downloadDir)
-	return nil
+		res.Downloaded, res.Skipped, res.Failed, downloadDir)
+	return res
 }
 
 // downloadOne fetches url into cacheDir using Go's net/http, returning

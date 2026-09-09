@@ -8,8 +8,8 @@ REM          so no black window pops up under Task Scheduler.
 REM
 REM Caveat: stdout/stderr are NOT connected to any console in GUI mode.
 REM          Anything you print to them is silently discarded.
-REM          For Task Scheduler usage, log to a file instead (e.g. --output,
-REM          or wrap with `>> log.txt 2>&1` after switching back to console).
+REM          For Task Scheduler usage, log to a file by wrapping with
+REM          `>> log.txt 2>&1` (build a console-subsystem binary for that).
 REM ============================================================================
 
 setlocal
@@ -34,13 +34,19 @@ echo [OK] %BIN_NAME% built at %~dp0%BIN_NAME%
 echo.
 echo ---- Task Scheduler settings ----
 echo Program : %~dp0%BIN_NAME%
-echo Arguments: --repo owner/name --platforms windows --archs amd64
+echo Arguments: (none)
 echo.
-echo ---- Useful flags for this project ----
-echo --from-file list.txt   batch mode: read URLs from list
-echo --output result.txt    batch mode: write URLs to file
-echo --download-dir D:\x    where downloaded files end up
-echo --proxy ""             disable the default 127.0.0.1:10808 proxy
+echo ---- Configuration ----
+echo There are no CLI flags. All knobs live in the config table inside
+echo the SQLite DB. Run any sqlite3 client against the DB to set keys:
+echo.
+echo   INSERT INTO config(key,value) VALUES('download_dir','D:\apps');
+echo   INSERT INTO config(key,value) VALUES('proxy','http://127.0.0.1:10808');
+echo   INSERT INTO config(key,value) VALUES('timeout','20s');
+echo   INSERT INTO config(key,value) VALUES('cache_dir','');
+echo   INSERT INTO config(key,value) VALUES('download','true');
+echo   INSERT INTO config(key,value) VALUES('no_proxy','false');
+echo   INSERT INTO config(key,value) VALUES('token','ghp_xxx');
 echo.
 echo ---- Debug builds (keep console) ----
 echo   go build -o gh-latest-debug.exe .
