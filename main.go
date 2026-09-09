@@ -14,14 +14,19 @@
 //                  <os.TempDir>/gh-latest-cache
 //   download       "true" to move files to download_dir. "false" to
 //                  only update the DB. Default: true
-//   token          GitHub API token (also $GITHUB_TOKEN env var).
-//                  Default: empty
+//
+// The GitHub API token is NEVER stored in the DB. It is resolved on
+// every run from `gh auth token` (with $GITHUB_TOKEN env as a
+// fallback), so PAT rotation and OAuth refresh just work.
 package main
 
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"time"
 )
 
@@ -74,10 +79,7 @@ func main() {
 		cacheDir = filepath.Join(os.TempDir(), "gh-latest-cache")
 	}
 
-	token := getConfig(db, "token", "")
-	if token == "" {
-		token = os.Getenv("GITHUB_TOKEN")
-	}
+	token := resolveToken()
 
 	// Proxy is a global package var consumed by every HTTP client.
 	SetProxyConfig(noProxy, proxy)
@@ -105,4 +107,34 @@ func parseBool(s string, fallback bool) bool {
 		return false
 	}
 	return fallback
+}
+
+// resolveToken picks the freshest available GitHub token. Tokens are
+// NEVER persisted (they expire and rotate), so every run asks the
+// dynamic source. Order:
+//
+//  1. `gh auth token` (the GitHub CLI manages OAuth refresh itself —
+//     the call returns the current valid token, or fails silently if
+//     the user isn't logged in)
+//  2. $GITHUB_TOKEN env var (handy for CI / scheduled tasks where gh
+//     CLI isn't installed)
+//
+// 4 DB config table is intentionally not in the list — a fixed-value
+// `token` row there would silently rot after expiry.
+func resolveToken() string {
+	// CREATE_NO_WINDOW (0x08000000) + HideWindow prevents `gh` from
+	// briefly allocating its own console — the parent process is a
+	// GUI-subsystem binary with no console, and without these flags
+	// Windows will flash a transient cmd window when gh starts.
+	cmd := exec.Command("gh", "auth", "token")
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000,
+	}
+	if out, err := cmd.Output(); err == nil {
+		if t := strings.TrimSpace(string(out)); t != "" {
+			return t
+		}
+	}
+	return os.Getenv("GITHUB_TOKEN")
 }

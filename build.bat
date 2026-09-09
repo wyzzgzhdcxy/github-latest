@@ -46,7 +46,9 @@ echo   INSERT INTO config(key,value) VALUES('timeout','20s');
 echo   INSERT INTO config(key,value) VALUES('cache_dir','');
 echo   INSERT INTO config(key,value) VALUES('download','true');
 echo   INSERT INTO config(key,value) VALUES('no_proxy','false');
-echo   INSERT INTO config(key,value) VALUES('token','ghp_xxx');
+echo.
+echo GitHub API token is resolved at every run via `gh auth token`
+echo (run `gh auth login` once). It is never stored in the DB.
 echo.
 echo ---- Debug builds (keep console) ----
 echo   go build -o gh-latest-debug.exe .

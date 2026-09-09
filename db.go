@@ -171,51 +171,55 @@ func listURLs(db *sql.DB) ([]urlRow, error) {
 	return out, rows.Err()
 }
 
-// markFetchError records that a release URL could not be fetched (network,
-// API, parse, etc.). status='fetch_error', updated_at=now, err is
-// truncated into status so the user can see why without opening a log.
-// All rows for this release_url (one per type) are updated together.
-func markFetchError(db *sql.DB, releaseURL, errMsg string) error {
-	return updateResult(db, releaseURL, "fetch_error: "+truncate(errMsg, 180))
+// markFetchError records that a release URL could not be fetched
+// (network, API, parse, etc.). The error is per-row because the row
+// is the unit of work: even if all rows share the same release_url,
+// each one deserves its own "fetch failed" timestamp.
+func markFetchError(db *sql.DB, rowID int64, errMsg string) error {
+	return updateResult(db, rowID, "fetch_error: "+truncate(errMsg, 180))
 }
 
-// updateResult records the latest status + timestamp for every row
-// belonging to a given release_url. status is free-form but
-// conventionally one of:
+// updateResult records the latest status + timestamp on a single row
+// (identified by id). status is free-form but conventionally one of:
 //   "success", "partial", "failed", "failed (not_found: ...)",
 //   "skipped", "skipped (no_config)", "skipped (up_to_date)",
 //   "fetch_error: ...", "parse_error: ...".
-func updateResult(db *sql.DB, releaseURL, status string) error {
+//
+// Updating by id (not by release_url) keeps the (release_url, type)
+// rows independent: a linux row's "not_found" must not overwrite a
+// win row's "success" on the same repo, and a linux row's download
+// URL must not clobber the win row's URL.
+func updateResult(db *sql.DB, rowID int64, status string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := db.Exec(
 		`UPDATE urls
 		    SET updated_at = ?,
 		        status     = ?
-		  WHERE release_url = ?`,
-		now, status, releaseURL,
+		  WHERE id = ?`,
+		now, status, rowID,
 	)
 	if err != nil {
-		return fmt.Errorf("update %s: %w", releaseURL, err)
+		return fmt.Errorf("update row %d: %w", rowID, err)
 	}
 	return nil
 }
 
 // markDownloaded records the URLs that were just downloaded for this
-// release_url (CSV) and updates the status + timestamp on every row
-// sharing the same release_url. Pass an empty downloadURLs to leave the
-// previous value intact (e.g. status-only updates).
-func markDownloaded(db *sql.DB, releaseURL, downloadURLs, status string) error {
+// row (CSV) and updates the status + timestamp on that one row. Pass
+// an empty downloadURLs to leave the previous value intact (e.g.
+// status-only updates).
+func markDownloaded(db *sql.DB, rowID int64, downloadURLs, status string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := db.Exec(
 		`UPDATE urls
 		    SET download_url = COALESCE(?, download_url),
 		        updated_at   = ?,
 		        status       = ?
-		  WHERE release_url = ?`,
-		nullableString(downloadURLs), now, status, releaseURL,
+		  WHERE id = ?`,
+		nullableString(downloadURLs), now, status, rowID,
 	)
 	if err != nil {
-		return fmt.Errorf("mark downloaded %s: %w", releaseURL, err)
+		return fmt.Errorf("mark downloaded row %d: %w", rowID, err)
 	}
 	return nil
 }

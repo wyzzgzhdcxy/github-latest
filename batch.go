@@ -95,7 +95,7 @@ func runBatch(dbPath string, opts batchOpts) error {
 		if len(configured) == 0 {
 			skippedNoConfig++
 			fmt.Fprintf(os.Stderr, "[skip] %s: no packages configured\n", raw)
-			if uerr := updateResult(db, raw, "skipped (no_config)"); uerr != nil {
+			if uerr := updateResult(db, row.ID, "skipped (no_config)"); uerr != nil {
 				fmt.Fprintf(os.Stderr, "[db] %s: %v\n", raw, uerr)
 			}
 			continue
@@ -103,14 +103,14 @@ func runBatch(dbPath string, opts batchOpts) error {
 
 		repo, perr := parseRepo(raw)
 		if perr != nil {
-			_ = updateResult(db, raw, "parse_error: "+truncate(perr.Error(), 180))
+			_ = updateResult(db, row.ID, "parse_error: "+truncate(perr.Error(), 180))
 			fmt.Fprintf(os.Stderr, "[skip] %s: %v\n", raw, perr)
 			continue
 		}
 
 		rel, ferr := fetchLatestRelease(repo, opts.timeout, opts.token)
 		if ferr != nil {
-			_ = markFetchError(db, raw, ferr.Error())
+			_ = markFetchError(db, row.ID, ferr.Error())
 			fmt.Fprintf(os.Stderr, "[fetch] %s: %v\n", repo, ferr)
 			continue
 		}
@@ -125,7 +125,7 @@ func runBatch(dbPath string, opts batchOpts) error {
 		matches := filterByConfigured(rel.Assets, configured)
 
 		if len(matches) == 0 {
-			if uerr := updateResult(db, raw,
+			if uerr := updateResult(db, row.ID,
 				"failed (not_found: "+strings.Join(configured, ",")+" in "+rel.TagName+")"); uerr != nil {
 				fmt.Fprintf(os.Stderr, "[db] %s: %v\n", raw, uerr)
 			}
@@ -153,7 +153,7 @@ func runBatch(dbPath string, opts batchOpts) error {
 		if equalURLSets(currentSet, storedSet) && len(storedSet) > 0 && filesPresent(opts.downloadDir, storedSet) {
 			fmt.Fprintf(os.Stderr, "[up_to_date] %s %s (%d urls)\n",
 				repo, rel.TagName, len(currentSet))
-			if uerr := updateResult(db, raw,
+			if uerr := updateResult(db, row.ID,
 				"skipped (up_to_date "+rel.TagName+")"); uerr != nil {
 				fmt.Fprintf(os.Stderr, "[db] %s: %v\n", raw, uerr)
 			}
@@ -184,7 +184,7 @@ func runBatch(dbPath string, opts batchOpts) error {
 			if result.Downloaded > 0 {
 				newURLs = strings.Join(currentSet, ",")
 			}
-			if uerr := markDownloaded(db, raw, newURLs, status); uerr != nil {
+			if uerr := markDownloaded(db, row.ID, newURLs, status); uerr != nil {
 				fmt.Fprintf(os.Stderr, "[db] %s: %v\n", raw, uerr)
 			}
 		} else {
@@ -192,7 +192,7 @@ func runBatch(dbPath string, opts batchOpts) error {
 			// set so the next -download run can do the up_to_date
 			// check without re-fetching (well, it will re-fetch, but
 			// the recorded URLs document the candidate).
-			if uerr := markDownloaded(db, raw, strings.Join(currentSet, ","),
+			if uerr := markDownloaded(db, row.ID, strings.Join(currentSet, ","),
 				"listed ("+rel.TagName+")"); uerr != nil {
 				fmt.Fprintf(os.Stderr, "[db] %s: %v\n", raw, uerr)
 			}
