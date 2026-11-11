@@ -14,7 +14,8 @@ REM ============================================================================
 
 setlocal
 set "BIN_NAME=gh-latest.exe"
-set "LDFLAGS=-s -w -H windowsgui"
+rem set "LDFLAGS=-s -w -H windowsgui"
+set "LDFLAGS=-s -w"
 
 echo === Building %BIN_NAME% (Windows GUI subsystem) ===
 

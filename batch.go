@@ -47,6 +47,7 @@ type batchOpts struct {
 	download    bool
 	downloadDir string
 	cacheDir    string
+	notifier    *Notifier // nil → no notifications; populated by main()
 }
 
 // runBatch opens dbPath, reads every row from the urls table, and for
@@ -85,6 +86,7 @@ func runBatch(dbPath string, opts batchOpts) error {
 
 	ok := 0
 	skippedNoConfig := 0
+	notified := make([]notifyEntry, 0)
 	for _, row := range rows {
 		raw := row.ReleaseURL
 		configured := row.configuredPackages()
@@ -183,6 +185,17 @@ func runBatch(dbPath string, opts batchOpts) error {
 			newURLs := ""
 			if result.Downloaded > 0 {
 				newURLs = strings.Join(currentSet, ",")
+				// SkipIfExists=false means batchResult.Packages
+				// holds only newly-downloaded filenames (the skip
+				// branch is unreachable), so it's safe to feed to
+				// the notifier as-is.
+				if len(result.Packages) > 0 {
+					notified = append(notified, notifyEntry{
+						Repo:     repo,
+						Tag:      rel.TagName,
+						Packages: result.Packages,
+					})
+				}
 			}
 			if uerr := markDownloaded(db, row.ID, newURLs, status); uerr != nil {
 				fmt.Fprintf(os.Stderr, "[db] %s: %v\n", raw, uerr)
@@ -203,6 +216,24 @@ func runBatch(dbPath string, opts batchOpts) error {
 	fmt.Fprintf(os.Stderr,
 		"processed %d/%d rows from %s (%d skipped: no packages configured)\n",
 		ok, len(rows), dbPath, skippedNoConfig)
+
+	// Fire-and-forget ntfy notification. Only triggers when at least
+	// one repo actually produced a new file this run; "up_to_date" /
+	// "skipped"/"failed" runs stay silent so the channel is signal,
+	// not noise.
+	//
+	// Send() dispatches on a goroutine; Wait() then blocks briefly so
+	// the process does not exit mid-request. This is the difference
+	// between "notification sent" and "silently dropped" — without
+	// the wait, a run that finishes fast kills the HTTP request
+	// before it reaches the server.
+	if opts.notifier != nil && len(notified) > 0 {
+		title, body := BuildBatchNotification(notified)
+		opts.notifier.Send(title, body)
+		if !opts.notifier.Wait(defaultNtfyTimeout + 2*time.Second) {
+			fmt.Fprintf(os.Stderr, "ntfy: send did not finish before deadline\n")
+		}
+	}
 	return nil
 }
 

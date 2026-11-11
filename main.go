@@ -84,12 +84,21 @@ func main() {
 	// Proxy is a global package var consumed by every HTTP client.
 	SetProxyConfig(noProxy, proxy)
 
+	// ntfy notification is opt-in: absent or empty config keys
+	// leave the Notifier disabled (zero value, no-op Send).
+	notifier := newNotifier()
+	notifier.URL = getConfig(db, "ntfy_url", "")
+	notifier.Topic = getConfig(db, "ntfy_topic", "")
+	notifier.User = getConfig(db, "ntfy_user", "")
+	notifier.Pass = getConfig(db, "ntfy_pass", "")
+
 	if err := runBatch(defaultDB, batchOpts{
 		timeout:     timeout,
 		token:       token,
 		download:    download,
 		downloadDir: downloadDir,
 		cacheDir:    cacheDir,
+		notifier:    notifier,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "batch error: %v\n", err)
 		os.Exit(1)

@@ -1,0 +1,11 @@
+# Build outputs
+# NOTE: the root gh-latest.exe is tracked on purpose — it is the released
+# artifact for Task Scheduler deployment. Only the local build/ scratch
+# directory is ignored.
+build/
+
+# Agent-tool scratch memory (local notes, may contain credentials)
+.workbuddy/
+
+# Local logs
+*.log
